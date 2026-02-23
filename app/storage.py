@@ -9,8 +9,20 @@ class GCSManager:
         self.bucket = self.storage_client.bucket(bucket_name)
 
     def load_image_from_url(self, url: str) -> Image.Image:
-        # Assuming URL is a GCS blob name or a direct link
-        blob_name = url.split("/")[-1]
+        # 1. Handle full URLs (strip the prefix if present)
+        # From: https://storage.googleapis.com/vton_gen_ai/customers/path/img.jpg
+        # To: customers/path/img.jpg
+        prefix = f"https://storage.googleapis.com/{self.bucket.name}/"
+        if url.startswith(prefix):
+            blob_name = url.replace(prefix, "")
+        elif url.startswith("gs://"):
+            blob_name = url.replace(f"gs://{self.bucket.name}/", "")
+        else:
+            # 2. Assume it's already a clean path like "customers/..."
+            blob_name = url
+
+        # REMOVED: blob_name = url.split("/")[-1] <--- This was the culprit!
+
         blob = self.bucket.blob(blob_name)
         return Image.open(io.BytesIO(blob.download_as_bytes())).convert("RGB")
 
@@ -22,4 +34,5 @@ class GCSManager:
         image.save(buffer, format="PNG")
         blob.upload_from_string(buffer.getvalue(), content_type="image/png")
         
-        return f"gs://{self.bucket.name}/{filename}"
+        # Returning a public-friendly URL is often more useful than gs://
+        return f"https://storage.googleapis.com/{self.bucket.name}/{filename}"
