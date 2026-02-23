@@ -4,7 +4,7 @@ from .storage import GCSManager
 from .engine import CatVTONEngine
 
 app = FastAPI()
-gcs = GCSManager(bucket_name="your-garment-bucket")
+gcs = GCSManager(bucket_name="vton_gen_ai")
 model_engine = None
 
 @app.on_event("startup")
