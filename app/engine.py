@@ -44,6 +44,9 @@ class CatVTONEngine:
         # 1. Preprocessing (Standard CatVTON sizes)
         #    Keep track of original resolution so we can restore it later.
         orig_width, orig_height = person_img.size
+        # Approximate a background color from the original person image so that
+        # any padding we add later blends in reasonably well.
+        bg_color = person_img.resize((1, 1), Image.LANCZOS).getpixel((0, 0))
         width, height = 768, 1024
 
         # Use padding instead of cropping for the person image so we don't
@@ -70,9 +73,18 @@ class CatVTONEngine:
             generator=generator
         )[0] # pipeline returns a list, we take the first image
         
-        # 4. Resize back to the original resolution so the output matches
-        #    the input person image size (helpful for downstream consumers).
+        # 4. Project back to the original canvas size while preserving aspect
+        #    ratio to avoid stretching the person.
         if result_image.size != (orig_width, orig_height):
-            result_image = result_image.resize((orig_width, orig_height), Image.LANCZOS)
+            # Fit the CatVTON output inside the original resolution.
+            scale = min(orig_width / width, orig_height / height)
+            new_w = int(width * scale)
+            new_h = int(height * scale)
+
+            fitted = result_image.resize((new_w, new_h), Image.LANCZOS)
+            canvas = Image.new("RGB", (orig_width, orig_height), bg_color)
+            offset = ((orig_width - new_w) // 2, (orig_height - new_h) // 2)
+            canvas.paste(fitted, offset)
+            result_image = canvas
 
         return result_image
