@@ -42,13 +42,20 @@ class CatVTONEngine:
 
     def infer(self, person_img: Image.Image, garment_img: Image.Image, garment_type: str):
         # 1. Preprocessing (Standard CatVTON sizes)
+        #    Keep track of original resolution so we can restore it later.
+        orig_width, orig_height = person_img.size
         width, height = 768, 1024
-        person_img = resize_and_crop(person_img, (width, height))
+
+        # Use padding instead of cropping for the person image so we don't
+        # lose parts of the body, hands, or accessories (e.g. headphones).
+        person_img = resize_and_padding(person_img, (width, height))
         garment_img = resize_and_padding(garment_img, (width, height))
 
         # 2. Generate Mask automatically
         mask = self.automasker(person_img, garment_type)['mask']
-        mask = self.mask_processor.blur(mask, blur_factor=9)
+        # A slightly smaller blur keeps the edited region closer to the clothing
+        # area and helps preserve nearby details like hands and accessories.
+        mask = self.mask_processor.blur(mask, blur_factor=3)
 
         # 3. Run Inference
         # We use a fixed seed of 42 for consistency, or you can randomize it
@@ -62,5 +69,10 @@ class CatVTONEngine:
             guidance_scale=2.5,
             generator=generator
         )[0] # pipeline returns a list, we take the first image
+        
+        # 4. Resize back to the original resolution so the output matches
+        #    the input person image size (helpful for downstream consumers).
+        if result_image.size != (orig_width, orig_height):
+            result_image = result_image.resize((orig_width, orig_height), Image.LANCZOS)
 
         return result_image
